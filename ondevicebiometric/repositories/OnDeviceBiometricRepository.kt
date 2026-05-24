@@ -69,7 +69,8 @@ class OnDeviceBiometricRepository(
         onCancel: (() -> Unit)? = null,
         onLockout: (String) -> Unit,
         onBiometricNotEnrolled: () -> Unit,
-        onBiometricHardwareUnavailable: () -> Unit
+        onBiometricHardwareUnavailable: () -> Unit,
+        onKeyInvalidated: (() -> Unit)? = null
     ) {
         val currentTime = System.currentTimeMillis()
         val remainingTime = checkLockoutStatus(currentTime)
@@ -80,21 +81,29 @@ class OnDeviceBiometricRepository(
             return
         }
 
-        biometricAuthManager.authenticate(
-            onSuccess = onSuccess,
-            onError = {
-                onError?.invoke()
-            },
-            onCancel = onCancel,
-            onLockout = { lockoutMessage ->
-                val lockoutDurationInMillis = 40 * 1000L
-                editor.putLong("lockout_end_time", System.currentTimeMillis() + lockoutDurationInMillis).apply()
-                onLockout(lockoutMessage)
-                startLockoutTimer(lockoutDurationInMillis)
-            },
-            onBiometricNotEnrolled = onBiometricNotEnrolled,
-            onBiometricHardwareUnavailable = onBiometricHardwareUnavailable
-        )
+        try {
+            biometricAuthManager.authenticate(
+                onSuccess = onSuccess,
+                onError = {
+                    onError?.invoke()
+                },
+                onCancel = onCancel,
+                onLockout = { lockoutMessage ->
+                    val lockoutDurationInMillis = 40 * 1000L
+                    editor.putLong("lockout_end_time", System.currentTimeMillis() + lockoutDurationInMillis).apply()
+                    onLockout(lockoutMessage)
+                    startLockoutTimer(lockoutDurationInMillis)
+                },
+                onBiometricNotEnrolled = onBiometricNotEnrolled,
+                onBiometricHardwareUnavailable = onBiometricHardwareUnavailable
+            )
+        } catch (e: android.security.keystore.KeyPermanentlyInvalidatedException) {
+            // The cryptographic key was permanently invalidated because biometric enrollment
+            // changed (e.g. a new fingerprint/face was added) or the user authenticated via
+            // device credential (PIN/pattern/password) instead of biometrics. The key must be
+            // regenerated on the next successful biometric enrollment.
+            onKeyInvalidated?.invoke() ?: onError?.invoke()
+        }
     }
 
     fun authenticateWithDeviceCredentialOnly(
