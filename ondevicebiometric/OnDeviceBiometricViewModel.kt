@@ -173,6 +173,13 @@ class OnDeviceBiometricViewModel(
             onBiometricHardwareUnavailable = {
                 log.warn("enableBiometric", "Biometric hardware not available, use device security")
                 toggleDeviceSecurityRequiredDialog()
+            },
+            onKeyInvalidated = {
+                log.warn("enableBiometric", "Biometric key permanently invalidated, re-registration required")
+                updateErrorDialog(
+                    appContext.getString(R.string.failed),
+                    "Your biometric data has changed. Please re-register your biometrics to continue."
+                )
             }
         )
     }
